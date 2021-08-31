@@ -1,14 +1,27 @@
 #include <opencv2/opencv.hpp>
 
+typedef struct PixelMemory
+{
+	int x;
+	int y;
+};
+
 float** q;
 float** p;
 int w, h;
+int pm_cnt = 0;;
+IplImage* src;
+CvPoint st, ed;
+PixelMemory* pm;
+
 
 float get_min(float a, float b, float c)
 {
 	return  (a < b&& a < c) ? a :
 		(b < a&& b < c) ? b : c;
 }
+
+
 
 float getEnergy_vertical(IplImage* src, int i, int j)
 {
@@ -29,7 +42,7 @@ float getEnergy_vertical(IplImage* src, int i, int j)
 	}
 }
 
-void  seam_vertical(IplImage* src) //´©Àû?¿¡³ÊÁö °è»ê
+void  seam_vertical(IplImage* src) //ëˆ„ì ?ì—ë„ˆì§€ ê³„ì‚°
 {
 	float minE;
 	for (int x = 0; x < w - 1; x++)
@@ -67,13 +80,13 @@ void removeSeam_vertical(int x, int y, IplImage* src)
 
 }
 
-void WhereSeam(int x, int y, IplImage* src)//seam ÆÄ¶û»öÀ¸·Î Ç¥½Ã
+void WhereSeam(int x, int y, IplImage* src)//seam íŒŒëž‘ìƒ‰ìœ¼ë¡œ í‘œì‹œ
 {
 	cvSet2D(src, y, x, cvScalar(255, 0, 0));
 	printf("0");
 }
 
-void SeamPath_vertical1(int x, int y, IplImage* src)//seam Ç¥½Ã
+void SeamPath_vertical1(int x, int y, IplImage* src)//seam í‘œì‹œ
 {
 	if (y == 0)
 	{
@@ -107,29 +120,9 @@ void SeamPath_vertical2(int x, int y, IplImage* src)
 	}
 }
 
-void minSeam_vertical(IplImage* src)//ÃÖ¼Ò seam °¡Àå ¸¶Áö¸· °ª ±¸ÇÏ±â
+void minSeam_vertical(IplImage* src)//ìµœì†Œ seam ê°€ìž¥ ë§ˆì§€ë§‰ ê°’ êµ¬í•˜ê¸°
 {
-	q = (float**)malloc(sizeof(float*) * (h));
-
-
-	for (int i = 0; i < h; i++) {
-		q[i] = (float*)malloc(sizeof(float) * (w));
-	}
-
-	for (int y = 0; y < h; y++)
-		for (int x = 0; x < w; x++)
-			q[y][x] = -1;
-
-	p = (float**)malloc(sizeof(float*) * (h));
-
-
-	for (int i = 0; i < h; i++) {
-		p[i] = (float*)malloc(sizeof(float) * (w));
-	}
-
-	for (int y = 0; y < h; y++)
-		for (int x = 0; x < w; x++)
-			p[y][x] = 0;
+	
 
 	seam_vertical(src);
 	int minIdx = 0;
@@ -169,7 +162,7 @@ float getEnergy_horizontal(IplImage* src, int i, int j)
 			+ (a.val[2]) / 3);
 	}
 }
-void  seam_horizontal(IplImage* src) //´©Àû?¿¡³ÊÁö °è»ê
+void  seam_horizontal(IplImage* src) //ëˆ„ì ?ì—ë„ˆì§€ ê³„ì‚°
 {
 	float minE;
 
@@ -243,28 +236,9 @@ void SeamPath_horizontal1(int x, int y, IplImage* src)
 	}
 }
 
-void minSeam_horizontal(IplImage* src)//ÃÖ¼Ò seam °¡Àå ¸¶Áö¸· °ª ±¸ÇÏ±â
+void minSeam_horizontal(IplImage* src)//ìµœì†Œ seam ê°€ìž¥ ë§ˆì§€ë§‰ ê°’ êµ¬í•˜ê¸°
 {
-	q = (float**)malloc(sizeof(float*) * (h));
-
-	for (int i = 0; i < h; i++) {
-		q[i] = (float*)malloc(sizeof(float) * (w));
-	}
-
-	for (int y = 0; y < h; y++)
-		for (int x = 0; x < w; x++)
-			q[y][x] = -1;
-
-	p = (float**)malloc(sizeof(float*) * (h));
-
-
-	for (int i = 0; i < h; i++) {
-		p[i] = (float*)malloc(sizeof(float) * (w));
-	}
-
-	for (int y = 0; y < h; y++)
-		for (int x = 0; x < w; x++)
-			p[y][x] = 0;
+	
 
 	seam_horizontal(src);
 	int minIdx = 0;
@@ -283,17 +257,75 @@ void minSeam_horizontal(IplImage* src)//ÃÖ¼Ò seam °¡Àå ¸¶Áö¸· °ª ±¸ÇÏ±â
 	cvWaitKey(1000);
 	SeamPath_horizontal2(w - 1, minIdx, src);
 }
+
+void myMouse(int event, int x, int y, int flags, void* param)
+{
+	
+	if (event == CV_EVENT_LBUTTONDOWN)
+	{
+		st = cvPoint(x, y);
+		/*
+		pm[pm_cnt].x = st.x;
+		pm[pm_cnt].y = st.y;
+		pm_cnt++;
+		*/
+		q[st.y][st.x] = 10000;
+
+	}
+	if (event == CV_EVENT_MOUSEMOVE &&flags== CV_EVENT_FLAG_LBUTTON)
+	{
+		ed = cvPoint(x, y);
+		CvScalar color = cvScalar(255,255,0);
+		cvLine(src, st, ed, color, 10);
+		cvShowImage("src", src);
+		/*
+		pm[pm_cnt].x = st.x;
+		pm[pm_cnt].y = st.y;
+		pm_cnt++;
+		*/
+		q[ed.y][ed.x] = 10000;
+		st = ed;
+		//cvSet2D(src, y, x, color);
+	}
+}
+
 int main()
 {
-	IplImage* src = cvLoadImage("c:\\temp\\sample.jpg");
+	src = cvLoadImage("c:\\temp\\sample.jpg");
 	
 	cvShowImage("src", src);
 	w = src->width;
 	h = src->height;
 	IplImage* dst = cvCreateImage(cvSize(w,h),8,3);
 	
+	pm = (PixelMemory*)malloc(sizeof(PixelMemory*) * (w*h));
+
+
 	while (1)
 	{
+		q = (float**)malloc(sizeof(float*) * (h));
+
+		for (int i = 0; i < h; i++) {
+			q[i] = (float*)malloc(sizeof(float) * (w));
+		}
+
+		for (int y = 0; y < h; y++)
+			for (int x = 0; x < w; x++)
+				q[y][x] = -1;
+
+		p = (float**)malloc(sizeof(float*) * (h));
+
+
+		for (int i = 0; i < h; i++) {
+			p[i] = (float*)malloc(sizeof(float) * (w));
+		}
+
+		for (int y = 0; y < h; y++)
+			for (int x = 0; x < w; x++)
+				p[y][x] = 0;
+
+		cvSetMouseCallback("src", myMouse);
+
 		if (cvWaitKey() == 'v')
 		{
 			minSeam_vertical(src);
@@ -305,6 +337,7 @@ int main()
 			minSeam_horizontal(src);
 			h--;
 		}
+
 		cvShowImage("src", src);
 
 		delete[] p;
