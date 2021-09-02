@@ -42,7 +42,7 @@ float getEnergy_vertical(IplImage* src, int i, int j)
 	}
 }
 
-void  seam_vertical(IplImage* src) //ëˆ„ì ?ì—ë„ˆì§€ ê³„ì‚°
+void  seam_vertical(IplImage* src) //´©Àû?¿¡³ÊÁö °è»ê
 {
 	float minE;
 	for (int x = 0; x < w - 1; x++)
@@ -80,13 +80,13 @@ void removeSeam_vertical(int x, int y, IplImage* src)
 
 }
 
-void WhereSeam(int x, int y, IplImage* src)//seam íŒŒë‘ìƒ‰ìœ¼ë¡œ í‘œì‹œ
+void WhereSeam(int x, int y, IplImage* src)//seam ÆÄ¶û»öÀ¸·Î Ç¥½Ã
 {
 	cvSet2D(src, y, x, cvScalar(255, 0, 0));
 	printf("0");
 }
 
-void SeamPath_vertical1(int x, int y, IplImage* src)//seam í‘œì‹œ
+void SeamPath_vertical1(int x, int y, IplImage* src)//seam Ç¥½Ã
 {
 	if (y == 0)
 	{
@@ -120,7 +120,7 @@ void SeamPath_vertical2(int x, int y, IplImage* src)
 	}
 }
 
-void minSeam_vertical(IplImage* src)//ìµœì†Œ seam ê°€ì¥ ë§ˆì§€ë§‰ ê°’ êµ¬í•˜ê¸°
+void minSeam_vertical(IplImage* src)//ÃÖ¼Ò seam °¡Àå ¸¶Áö¸· °ª ±¸ÇÏ±â
 {
 	
 
@@ -162,7 +162,7 @@ float getEnergy_horizontal(IplImage* src, int i, int j)
 			+ (a.val[2]) / 3);
 	}
 }
-void  seam_horizontal(IplImage* src) //ëˆ„ì ?ì—ë„ˆì§€ ê³„ì‚°
+void  seam_horizontal(IplImage* src) //´©Àû?¿¡³ÊÁö °è»ê
 {
 	float minE;
 
@@ -236,7 +236,7 @@ void SeamPath_horizontal1(int x, int y, IplImage* src)
 	}
 }
 
-void minSeam_horizontal(IplImage* src)//ìµœì†Œ seam ê°€ì¥ ë§ˆì§€ë§‰ ê°’ êµ¬í•˜ê¸°
+void minSeam_horizontal(IplImage* src)//ÃÖ¼Ò seam °¡Àå ¸¶Áö¸· °ª ±¸ÇÏ±â
 {
 	
 
