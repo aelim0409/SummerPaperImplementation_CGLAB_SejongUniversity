@@ -10,21 +10,50 @@ float** q;
 float** p;
 int w, h;
 int pm_cnt = 0;;
-int notMin = 0;
+int maxX, minY;
 IplImage* src;
 CvPoint st, ed;
 PixelMemory* pm;
+IplImage* dst;
 
+void guideline()
+{
+	maxX = -FLT_MAX;
+	minY = FLT_MAX;
+	for (int i = 0; i < pm_cnt; i++)
+	{
+		if (pm[i].x > maxX)
+		{
+			maxX = pm[i].x;
+		}
+
+		if (pm[i].y < minY)
+		{
+			minY = pm[i].y;
+		}
+	}
+
+}
 bool changeEnergyMax(int x, int y)
 {
 	for (int i = 0; i < pm_cnt; i++)
 	{
-		if (x == pm[i].x && y == pm[i].y)
+		if (x + 1 < w)
 		{
-			
-			return true;
+			if (x <= pm[i].x && y <= pm[i].y)
+			{
+
+				return true;
+			}
 		}
-		
+		else
+		{
+			if (x >= pm[i].x && y <= pm[i].y)
+			{
+
+				return true;
+			}
+		}
 	}
 	//printf("false\n");
 	return false;
@@ -37,6 +66,14 @@ void changeMemoryX()
 			pm[i].x = pm[i].x - 1;
 	}
 }
+void changeMemoryY()
+{
+	for (int i = 0; i < pm_cnt; i++)
+	{
+		if (pm[i].y > 0)
+			pm[i].y = pm[i].y - 1;
+	}
+}
 float get_min(float a, float b, float c)
 {
 	return  (a < b&& a < c) ? a :
@@ -47,30 +84,24 @@ float get_min(float a, float b, float c)
 
 float getEnergy_vertical(IplImage* src, int i, int j)
 {
-	if (changeEnergyMax(i, j) == false)
+
+	if (i + 1 <= w - 1)
 	{
-		if (i + 1 <= w - 1)
-		{
-			CvScalar a = cvGet2D(src, j, i);
-			CvScalar b = cvGet2D(src, j, i + 1);
-			
-			return abs(((a.val[0] - b.val[0])
-				+ (a.val[1] - b.val[1])
-				+ (a.val[2] - b.val[2])) / 3);
-		}
-		else
-		{
-			CvScalar a = cvGet2D(src, j, i);
-			return abs((a.val[0])
-				+ (a.val[1])
-				+ (a.val[2]) / 3);
-		}
+		CvScalar a = cvGet2D(src, j, i);
+		CvScalar b = cvGet2D(src, j, i + 1);
+
+		return abs(((a.val[0] - b.val[0])
+			+ (a.val[1] - b.val[1])
+			+ (a.val[2] - b.val[2])) / 3);
 	}
 	else
 	{
-		//printf("TRUE\n");
-		return 10000;
+		CvScalar a = cvGet2D(src, j, i);
+		return abs((a.val[0])
+			+ (a.val[1])
+			+ (a.val[2]) / 3);
 	}
+
 }
 
 void  seam_vertical(IplImage* src) //누적?에너지 계산
@@ -83,43 +114,26 @@ void  seam_vertical(IplImage* src) //누적?에너지 계산
 	for (int y = 1; y < h; y++)
 		for (int x = 0; x < w; x++)
 		{
-				if (x - 1 < 0)
-					minE = MIN(q[y - 1][x], q[y - 1][x + 1]);
-				else if (x + 1 > w - 1)
-					minE = MIN(q[y - 1][x - 1], q[y - 1][x]);
-				else
-					minE = get_min(q[y - 1][x - 1], q[y - 1][x], q[y - 1][x + 1]);
-				
+			if (x - 1 < 0)
+				minE = MIN(q[y - 1][x], q[y - 1][x + 1]);
+			else if (x + 1 > w - 1)
+				minE = MIN(q[y - 1][x - 1], q[y - 1][x]);
+			else
+				minE = get_min(q[y - 1][x - 1], q[y - 1][x], q[y - 1][x + 1]);
+			if (changeEnergyMax(x, y))
+				q[y][x] = 10000;
+			else
 				q[y][x] = minE + getEnergy_vertical(src, x, y);
-			//	if (q[y][x] >= 10000)
-				//	printf("q[y][x] = %.f\n", q[y][x]);
-				/*
-				if (q[y][x] >= 10000)
-				{
-					//printf("q[y][x] : %.f\n", q[y][x]);
-					//printf("M %d\n", x);
-					if (x > w / 2)
-					{
-						p[y][x] = -40;
-						//printf("p[y][x]>w/2: %d \n", p[y][x]);
-					}
-					else {
-						p[y][x] = 40;
-						//printf("p[y][x]<w/2: %d \n", p[y][x]);
-					}
-						
-				}
-				*/
-				//else
-				//{
-					if (minE == q[y - 1][x - 1])
-						p[y][x] = -1;
-					else if (minE == q[y - 1][x])
-						p[y][x] = 0;
-					else
-						p[y][x] = 1;
-				//}
-			
+
+
+			if (minE == q[y - 1][x - 1])
+				p[y][x] = -1;
+			else if (minE == q[y - 1][x])
+				p[y][x] = 0;
+			else
+				p[y][x] = 1;
+
+
 		}
 }
 
@@ -131,6 +145,7 @@ void removeSeam_vertical(int x, int y, IplImage* src)
 		cvSet2D(src, y, i, after);
 	}
 	cvSet2D(src, y + 1, w - 1, cvScalar(0, 0, 0));
+
 
 }
 
@@ -152,9 +167,9 @@ void SeamPath_vertical1(int x, int y, IplImage* src)//seam 표시
 
 	else
 	{
-	//	printf("x+p = %d\n", p[y][x]);
+		//	printf("x+p = %d\n", p[y][x]);
 		WhereSeam(x + p[y][x], y - 1, src);
-		
+
 		SeamPath_vertical1(x + p[y][x], y - 1, src);
 
 	}
@@ -177,54 +192,33 @@ void SeamPath_vertical2(int x, int y, IplImage* src)
 	}
 }
 
-bool SeamPath_vertical3(int x, int y)
-{
-	int X = x + p[y][x];
-	if (y == 0)
-	{
-		return true;
-	}
-	else
-	{
-		
-		if (q[y][X] > 10000)
-			return false;
-		SeamPath_vertical3(X, y - 1);
-	}
-	
-}
+
 
 void minSeam_vertical(IplImage* src)//최소 seam 가장 마지막 값 구하기
 {
 
 	seam_vertical(src);
-	
+
 	int minIdx = 0;
 	float min_totalE = FLT_MAX;
 
 	for (int x = 0; x < w; x++)
 	{
 		//printf("minTotal = %.f ,%d때 에너지: %.f\n",min_totalE,x, q[h - 1][x]);
-		
-		if (q[h - 1][x] <= min_totalE && x!=notMin)
+
+		if (q[h - 1][x] < min_totalE)
 		{
 			minIdx = x;
 			min_totalE = q[h - 1][x];
 		}
 	}
-	printf("minIDx: %d\n", minIdx);
-	if (SeamPath_vertical3(minIdx, h - 1) == false)
-	{
-		printf("false");
-		notMin = minIdx;
-		minSeam_vertical(src);
-	}
-	else
-	{
-		SeamPath_vertical1(minIdx, h - 1, src);
-		cvWaitKey(100);
-		SeamPath_vertical2(minIdx, h - 1, src);
-	}
+
+	SeamPath_vertical1(minIdx, h - 1, src);
+	cvWaitKey(10);
+	SeamPath_vertical2(minIdx, h - 1, src);
+	cvSet2D(src, 0, w - 1, cvScalar(0, 0, 0));
+	cvSet2D(src, 1, w - 1, cvScalar(0, 0, 0));
+
 }
 
 //horizontal seam
@@ -265,7 +259,10 @@ void  seam_horizontal(IplImage* src) //누적?에너지 계산
 				minE = MIN(q[y - 1][x - 1], q[y][x - 1]);
 			else
 				minE = get_min(q[y - 1][x - 1], q[y][x - 1], q[y + 1][x - 1]);
-			q[y][x] = minE + getEnergy_horizontal(src, x, y);
+			if (changeEnergyMax(x, y))
+				q[y][x] = 10000;
+			else
+				q[y][x] = minE + getEnergy_horizontal(src, x, y);
 
 			if (y - 1 < 0)
 			{
@@ -331,7 +328,7 @@ void minSeam_horizontal(IplImage* src)//최소 seam 가장 마지막 값 구하기
 
 	for (int y = 0; y < h; y++)
 	{
-		printf("%d때 에너지: %d\n", y, q[y][w - 1]);
+		//printf("%d때 에너지: %.f\n", y, q[y][w - 1]);
 		if (q[y][w - 1] < min_totalE)
 		{
 			minIdx = y;
@@ -340,8 +337,11 @@ void minSeam_horizontal(IplImage* src)//최소 seam 가장 마지막 값 구하기
 	}
 	//printf("%d %d\n", w-1, minIdx);
 	SeamPath_horizontal1(w - 1, minIdx, src);
-	cvWaitKey(100);
+	cvWaitKey(10);
 	SeamPath_horizontal2(w - 1, minIdx, src);
+	cvSet2D(src, h - 1, 0, cvScalar(0, 0, 0));
+	//cvSet2D(src, h-1,1, cvScalar(0, 0, 0));
+	//cvSet2D(src, h - 1, 2, cvScalar(0, 0, 0));
 }
 
 void myMouse(int event, int x, int y, int flags, void* param)
@@ -350,11 +350,11 @@ void myMouse(int event, int x, int y, int flags, void* param)
 	if (event == CV_EVENT_LBUTTONDOWN)
 	{
 		st = cvPoint(x, y);
-		
+
 		pm[pm_cnt].x = st.x;
 		pm[pm_cnt].y = st.y;
 		pm_cnt++;
-		printf("mouse %d %d\n", st.x, st.y);
+		//printf("mouse %d %d\n", st.x, st.y);
 		//q[st.y][st.x] = 10000;
 
 	}
@@ -362,30 +362,35 @@ void myMouse(int event, int x, int y, int flags, void* param)
 	{
 		ed = cvPoint(x, y);
 		CvScalar color = cvScalar(255, 255, 0);
-		cvLine(src, st, ed, color, 1);
+		cvLine(src, st, ed, color, 10);
 		cvShowImage("src", src);
-		
+
 		pm[pm_cnt].x = st.x;
 		pm[pm_cnt].y = st.y;
 		pm_cnt++;
-		
+
 		//q[ed.y][ed.x] = 10000;
 		st = ed;
 		//printf("mouse %d %d\n", st.x, st.y);
 		//cvSet2D(src, y, x, color);
 	}
+	if (event == CV_EVENT_LBUTTONUP)
+	{
+		cvShowImage("src", dst);
+
+	}
 }
 
 int main()
 {
-	src = cvLoadImage("c:\\temp\\dolphin.jpg");
-
+	src = cvLoadImage("c:\\temp\\SeamCarvingSrc.jpg");
+	
 	cvShowImage("src", src);
 	w = src->width;
 	h = src->height;
-	IplImage* dst = cvCreateImage(cvSize(w, h), 8, 3);
+	 dst = cvLoadImage("c:\\temp\\SeamCarvingSrc.jpg");
 
-	pm = (PixelMemory*)malloc(sizeof(PixelMemory*) * (w*h));
+	pm = (PixelMemory*)malloc(sizeof(PixelMemory*) * (w * h));
 	//printf("%d\n", w / 2);
 
 	while (1)
@@ -415,21 +420,26 @@ int main()
 
 		if (cvWaitKey() == 'v')
 		{
-			minSeam_vertical(src);
-			changeMemoryX();
+			minSeam_vertical(dst);
+			if (maxX + 1 >= w - 1)
+				changeMemoryX();
 			w--;
+
 		}
 
 		if (cvWaitKey() == 'h')
 		{
-			minSeam_horizontal(src);
+			minSeam_horizontal(dst);
+			if (minY + 1 >= h - 1)
+				changeMemoryY();
 			h--;
 		}
 
-		cvShowImage("src", src);
+		cvShowImage("src", dst);
 
 		delete[] p;
 		delete[] q;
+
 	}
 
 
