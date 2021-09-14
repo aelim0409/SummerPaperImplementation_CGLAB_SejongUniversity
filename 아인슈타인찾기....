@@ -1,0 +1,170 @@
+#include <opencv2/opencv.hpp>
+#pragma warning(disable:4996)
+
+IplImage* src;
+IplImage* msk;
+IplImage* dst;
+int w, h;
+CvScalar white = cvScalar(255, 255, 255);
+
+double** colorMemory;
+double** colorMemory2;
+
+float  getDist(CvScalar a, CvScalar b)
+{
+	return sqrt((a.val[0] - b.val[0]) * (a.val[0] - b.val[0])
+		+ (a.val[1] - b.val[1]) * (a.val[1] - b.val[1])
+		+ (a.val[2] - b.val[2]) * (a.val[2] - b.val[2]));
+}
+
+inline bool isWhite(CvScalar f)
+{
+	if (f.val[0] == white.val[0] && f.val[1] == white.val[1] && f.val[2] == white.val[2])
+		return true;
+	return false;
+}
+
+inline CvScalar PoissonEditing(CvScalar f1, CvScalar f2, CvScalar f3, CvScalar f4, CvScalar F)
+{
+	CvScalar f;
+	f.val[0] = (f1.val[0] + f2.val[0] + f3.val[0] + f4.val[0]) - 4 * F.val[0];
+	f.val[1] = (f1.val[1] + f2.val[1] + f3.val[1] + f4.val[1]) - 4 * F.val[1];
+	f.val[2] = (f1.val[2] + f2.val[2] + f3.val[2] + f4.val[2]) - 4 * F.val[2];
+	return f;
+}
+
+inline CvScalar PoissonEditing1(CvScalar f1, CvScalar f2, CvScalar f3, CvScalar f4)
+{
+	CvScalar f;
+	f.val[0] = (f1.val[0] + f2.val[0] + f3.val[0] + f4.val[0]) / 4;
+	f.val[1] = (f1.val[1] + f2.val[1] + f3.val[1] + f4.val[1]) / 4;
+	f.val[2] = (f1.val[2] + f2.val[2] + f3.val[2] + f4.val[2]) / 4;
+
+	return f;
+}
+
+void initValue()
+{
+	for (int i = 0; i < w * h; i++)
+	{
+		for (int k = 0; k < 3; k++)
+		{
+			colorMemory[i][k] = 0;
+			colorMemory2[i][k] = 0;
+		}
+	}
+
+	for (int y = 0; y < h; y++)
+		for (int x = 0; x < w; x++)
+		{
+			if (x - 1 < 0 || x + 2 > w - 1)
+				continue;
+
+			if (y - 1 < 0 || y + 2 > h - 1)
+				continue;
+
+			CvScalar f = cvGet2D(src, y, x);
+			CvScalar F = cvGet2D(msk, y, x);
+			
+
+			if (isWhite(F))
+			{
+				CvScalar f1 = cvGet2D(src, y, x - 1);
+				CvScalar f2 = cvGet2D(src, y, x + 1);
+				CvScalar f3 = cvGet2D(src, y - 1, x);
+				CvScalar f4 = cvGet2D(src, y + 1, x);
+				for (int k = 0; k < 3; k++)
+				{
+					colorMemory[y * src->width + x][k] = (f1.val[k] + f2.val[k] + f3.val[k] + f4.val[k])/4;
+				}
+			}
+		}
+}
+
+
+
+int main()
+{
+	src = cvLoadImage("c:\\temp\\PIESrc.dib");
+	msk = cvLoadImage("c:\\temp\\PIEMask.dib");
+	w = src->width;
+	h = src->height;
+
+	dst = cvCreateImage(cvSize(w, h), 8, 3);
+	cvShowImage("src", src);
+	cvShowImage("msk", msk);
+
+	colorMemory = (double**)malloc(sizeof(double*)*(w*h));
+
+	for(int i=0;i<w*h;i++)
+		colorMemory[i] = (double*)malloc(sizeof(double) * 3);
+
+	colorMemory2 = (double**)malloc(sizeof(double*) * (w * h));
+
+	for (int i = 0; i < w * h; i++)
+		colorMemory2[i] = (double*)malloc(sizeof(double) * 3);
+
+	initValue();
+	
+
+	double sumF = 0;
+	double prevSumF = 0;
+	int cnt = 0;
+	int start = 1;
+
+	while (1)
+	{
+		prevSumF = sumF;
+		sumF = 0;
+
+		for (int y = 0; y < h; y++)
+		{
+			for (int x = 0; x < w; x++)
+			{
+				if (x - 1 < 0 || x + 2 > w - 1)
+					continue;
+
+				if (y - 1 < 0 || y + 2 > h - 1)
+					continue;
+
+				CvScalar m = cvGet2D(msk, y, x);
+				CvScalar m2 = cvGet2D(src, y, x);
+				if (isWhite(m))
+				{
+					CvScalar F1;
+					for (int k = 0; k < 3; k++)
+					{
+						/*
+						double value = (colorMemory[y * src->width + x][k]
+							- colorMemory2[x * src->width + y + 1][k]
+							- colorMemory2[x * src->width + y - 1][k]
+							- colorMemory2[x * src->width + y + src->width][k]
+							- colorMemory2[x * src->width + y - src->width][k]) / -4;
+							*/
+						double value = colorMemory[y * src->width + x][k];
+
+						sumF += ((colorMemory2[x * src->width + y][k] - value) * (colorMemory2[x * src->width + y][k] - value)) / 100000;
+						colorMemory2[y * src->width + x][k] = value;
+
+						F1.val[k] = colorMemory2[y * src->width + x][k];
+					}
+					printf("%.f  : %.f \n",F1.val[0],m2.val[0]);
+					cvSet2D(src, y, x, F1);
+					cvWaitKey(1);
+
+				}
+			}
+			cvShowImage("dst", src);
+			cvWaitKey(1);
+		}
+	
+
+		
+		
+		printf("%f\n", sumF);
+
+	}
+	cvWaitKey();
+	return 0;
+
+}
