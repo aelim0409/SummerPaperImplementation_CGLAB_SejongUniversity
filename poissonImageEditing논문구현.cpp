@@ -17,7 +17,7 @@ CvPoint st, ed, pos;
 PixelMemory* pm;
 IplImage* dst, *dstO;
 CvScalar white = cvScalar(255, 255, 255);
-
+CvScalar **X, **VX;
 
 void makePixelmemory()
 {
@@ -66,12 +66,6 @@ void attatchSrc(int x, int y)
 
 }
 
-float  getDist(CvScalar a, CvScalar b)
-{
-	return sqrt((a.val[0] - b.val[0]) * (a.val[0] - b.val[0])
-		+ (a.val[1] - b.val[1]) * (a.val[1] - b.val[1])
-		+ (a.val[2] - b.val[2]) * (a.val[2] - b.val[2]));
-}
 bool isWhite(CvScalar f)
 {
 	if (f.val[0] == white.val[0] && f.val[1] == white.val[1] && f.val[2] == white.val[2])
@@ -79,75 +73,88 @@ bool isWhite(CvScalar f)
 	return false;
 }
 
-CvScalar PoissonEditing1(int x, int y)
-{
-	//printf("dddddd\n");
-	CvScalar now = cvGet2D(dstO, y, x);
-	CvScalar f1 = cvGet2D(dstO, y, x - 1);
-	CvScalar f2 = cvGet2D(dstO, y, x + 1);
-	CvScalar f3 = cvGet2D(dstO, y - 1, x);
-	CvScalar f4 = cvGet2D(dstO, y + 1, x);
 
-	CvScalar nowV = cvGet2D(srcv, y - pos.y, x - pos.x);
-	CvScalar v1 = cvGet2D(srcv, y - pos.y, x - pos.x - 1);
-	CvScalar v2 = cvGet2D(srcv, y - pos.y, x - pos.x + 1);
-	CvScalar v3 = cvGet2D(srcv, y - pos.y - 1, x - pos.x);
-	CvScalar v4 = cvGet2D(srcv, y - pos.y + 1, x - pos.x);
+void initColor()
+{
+	X = (CvScalar**)malloc(sizeof(CvScalar*)*dst->height);
+	for (int i = 0; i < dst->height; i++)
+		X[i] = (CvScalar*)malloc(sizeof(CvScalar)*dst->width);
+
+	VX = (CvScalar**)malloc(sizeof(CvScalar*)*h);
+	for (int i = 0; i < h; i++)
+		VX[i] = (CvScalar*)malloc(sizeof(CvScalar)*w);
+
+	for (int y = 0; y < dst->height; y++)
+	{
+		for (int x = 0; x < dst->width; x++)
+		{
+			CvScalar f = cvGet2D(dstO, y, x);
+			//printf("%f \n", f.val[0]);
+			X[y][x] = f;
+		}
+	}
+
+	for (int y = 0; y < h; y++)
+	{
+		for (int x = 0; x < w; x++)
+		{
+			CvScalar f = cvGet2D(srcv, y, x);
+			VX[y][x] = f;
+		}
+	}
+	/*
+	for (int i = 0; i < pm_cnt; i++)
+	{
+		CvScalar f = cvGet2D(srcv, pm[i].y, pm[i].x);
+		VX[pm[i].y][pm[i].x] = f;
+	}
+	*/
+}
+
+CvScalar getColor(int x, int y)
+{
+	CvScalar F;
+
+	CvScalar now = X[y][x];
+	CvScalar f1 =X[y][x-1];
+	CvScalar f2 =X[y][x+1];
+	CvScalar f3 = X[y-1][x];
+	CvScalar f4 = X[y+1][x];
+
+	//printf("pm[0].y : %d   y-pos.y = %d\n", pm[0].y, y - pos.y);
+	CvScalar nowV = VX[y - pos.y][x - pos.x];
+	CvScalar v1 = VX[y - pos.y][x - pos.x-1];
+	CvScalar v2 = VX[y - pos.y][x - pos.x + 1];
+	CvScalar v3 = VX[y - pos.y-1][x - pos.x];
+	CvScalar v4 = VX[y - pos.y+1][x - pos.x];
 
 	CvScalar v1_1 = cvGet2D(msk, y - pos.y, x - pos.x - 1);
 	CvScalar v2_1 = cvGet2D(msk, y - pos.y, x - pos.x + 1);
 	CvScalar v3_1 = cvGet2D(msk, y - pos.y - 1, x - pos.x);
 	CvScalar v4_1 = cvGet2D(msk, y - pos.y + 1, x - pos.x);
 
-
-	CvScalar F;
-
-	/*
-	if (getDist(f1, now) < getDist(v1, nowV))
+	if (!isWhite(v1_1) || !isWhite(v2_1) || !isWhite(v3_1) || !isWhite(v4_1))
 	{
-		for (int i = 0; i < 2; i++)
-		{
-			F.val[i] = (v1.val[i] + v2.val[i] + v3.val[i] + v4.val[i]) / 4;
-		}
-	}
-	else
-	{
-		for (int i = 0; i < 2; i++)
-		{
-			F.val[i] = (f1.val[i] + f2.val[i] + f3.val[i] + f4.val[i]) / 4;
-		}
-	}
-	*/
-
-	
-	if (!isWhite(v1_1) || !isWhite(v2_1) || !isWhite(v3_1)|| !isWhite(v4_1))
-	{
-		//printf("not\n");
 		for (int i = 0; i < 3; i++)
 		{
 			F.val[i] = (f1.val[i] + f2.val[i] + f3.val[i] + f4.val[i]) / 4;
 		}
 	}
-	
-	else
-	{
-		F.val[0] = ((f1.val[0] + f2.val[0] + f3.val[0] + f4.val[0]) + (v1.val[0] + v2.val[0] + v3.val[0] + v4.val[0])) / 4;
-		F.val[1] = ((f1.val[1] + f2.val[1] + f3.val[1] + f4.val[1]) + (v1.val[1] + v2.val[1] + v3.val[1] + v4.val[1])) / 4;
-		F.val[2] = ((f1.val[2] + f2.val[2] + f3.val[2] + f4.val[2]) + (v1.val[2] + v2.val[2] + v3.val[2] + v4.val[2])) / 4;
 
+	else {	
+
+		for (int i = 0; i < 3; i++)
+		{
+			F.val[i] = ((f1.val[i] + f2.val[i] + f3.val[i] + f4.val[i]) + (v1.val[i] + v2.val[i] + v3.val[i] + v4.val[i])) / 4;
+			//F.val[i] = ( (v1.val[i] + v2.val[i] + v3.val[i] + v4.val[i])) / 4;
+		}
 	}
 	
-
-	/*
-	for (int i = 0; i < 3; i++)
-	{
-		F.val[i] = ((f1.val[i] + f2.val[i] + f3.val[i] + f4.val[i])+ (v1.val[i] + v2.val[i] + v3.val[i] + v4.val[i])) / 4;
-	}
-	*/
+	//X[y][x] = F;
 	return F;
 }
 
-void poissonSolver()
+void poissonEditing()
 {
 	int W = dst->width;
 	int H = dst->height;
@@ -156,38 +163,24 @@ void poissonSolver()
 	{
 		for (int y = pos.y; y < H; y++)
 		{
-			//printf("xxxxxxx\n");
 			for (int x = pos.x; x < W; x++)
 			{
-
-				if (x - pos.x < 0 || y - pos.y < 0)
-					continue;
-				//CvScalar m = cvGet2D(msk, y-pos.y,x-pos.x);
 				if (isCopy[y][x] == 0)
 				{
-					//printf("DDDDDD\n");
-
-					//if (x  < 0 || x + 1  > w - 1)
-					//	continue;
-
-//					if (y < 0 || y + 1  > h - 1)
-	//					continue;
-					//printf("%d %d %d %d %d\n", y - pos.y, x - pos.x, isCopy[y][x], y, x);
-					cvSet2D(dst, y, x, PoissonEditing1(x, y));
-					//sumF += (getDist(F1, F2));
-				//	sumF += F1.val[0];
+					cvSet2D(dst, y, x, getColor(x, y));
 				}
-				//printf("ed\n");
 			}
+			cvShowImage("dst", dst);
+			cvWaitKey(1);
 		}
-		//printf("end\n");
-		cvShowImage("dst", dst);
-		cvWaitKey(1);
+		
+		
 	}
 }
+
+
 void myMouse(int event, int x, int y, int flags, void* param)
 {
-
 	if (event == CV_EVENT_LBUTTONDOWN)
 		st = cvPoint(x, y);
 
@@ -203,6 +196,7 @@ void myMouse(int event, int x, int y, int flags, void* param)
 	if (event == CV_EVENT_LBUTTONUP)
 	{
 		makePixelmemory();
+		initColor();
 		makeMask();
 		cvShowImage("src", src);
 		cvShowImage("msk", msk);
@@ -211,7 +205,6 @@ void myMouse(int event, int x, int y, int flags, void* param)
 
 void myMouse2(int event, int x, int y, int flags, void* param)
 {
-
 	if (event == CV_EVENT_LBUTTONDOWN)
 		pos = cvPoint(x, y);
 
@@ -219,7 +212,8 @@ void myMouse2(int event, int x, int y, int flags, void* param)
 	{
 		attatchSrc(pos.x, pos.y);
 		cvShowImage("dst", dst);
-		poissonSolver();
+		
+		poissonEditing();
 
 	}
 }
