@@ -1,5 +1,6 @@
 
 
+
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
@@ -193,9 +194,9 @@ void poissonEditing()
 {
 	int W = dst->width;
 	int H = dst->height;
-	int w = 0;
-	int h = 0;
+
 	CvScalar** gpu_dst;
+	CvScalar** host_dst;
 
 	cudaMalloc((CvScalar**)&gpu_dst, sizeof(CvScalar*) * W * H);
 
@@ -206,7 +207,8 @@ void poissonEditing()
 
 	poissonEditing_odd << <grid, 1 >> > (gpu_dst, W, H);
 
-	CvScalar** host_dst = gpu_dst;
+	cudaMemcpy(host_dst, gpu_dst, W * H * sizeof(CvScalar*), cudaMemcpyDeviceToHost);
+	
 
 
 	for (int y = 0; y < H; y++)
@@ -277,6 +279,8 @@ void myMouse2(int event, int x, int y, int flags, void* param)
 	if (event == CV_EVENT_LBUTTONUP)
 	{
 		attatchSrc(pos.x, pos.y);
+
+		//cudaMemcpy(pos_gpu, pos,  sizeof(CvPoint), cudaMemcpyHostToDevice);
 		pos_gpu = pos;
 		cvShowImage("dst", dst);
 
@@ -309,9 +313,6 @@ int main()
 	for (int y = 0; y < dst->height; y++)
 		for (int x = 0; x < dst->width; x++)
 			isCopy[y][x] = -1;
-
-
-
 
 	cvSetMouseCallback("src", myMouse);
 	cvSetMouseCallback("dst", myMouse2);
