@@ -1,6 +1,7 @@
 
 
 
+
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
@@ -23,11 +24,12 @@ IplImage* srcv;
 IplImage* msk;
 CvPoint st, ed,pos;
 __device__ CvPoint pos_gpu;
-__device__ CvScalar** VX_gpu, ** X_gpu;
+CvScalar* VX_gpu, * X_gpu;
+
 PixelMemory* pm;
 IplImage* dst, * dstO;
 CvScalar white = cvScalar(255, 255, 255);
-CvScalar** X, ** VX;
+CvScalar* X, * VX;
 
 void makePixelmemory()
 {
@@ -59,6 +61,7 @@ void makeMask()
 		}
 
 }
+
 void attatchSrc(int x, int y)
 {
 	for (int i = 0; i < pm_cnt; i++)
@@ -79,114 +82,147 @@ bool isWhite(CvScalar f)
 	return false;
 }
 
+
 void initColor() //cvScalar 배열 만들기 
 {
 	
-	X = (CvScalar**)malloc(sizeof(CvScalar*) * dstO->height);
-	for (int i = 0; i < dst->height; i++)
-		X[i] = (CvScalar*)malloc(sizeof(CvScalar) * dstO->width);
+	X = (CvScalar*)malloc(sizeof(CvScalar) * dstO->height* dstO->width);
+	
 
-	VX = (CvScalar**)malloc(sizeof(CvScalar*) * h);
-	for (int i = 0; i < h; i++)
-		VX[i] = (CvScalar*)malloc(sizeof(CvScalar) * w);
+	VX = (CvScalar*)malloc(sizeof(CvScalar) * h*w);
+	
+
+	cudaMalloc((CvScalar**)&X_gpu, sizeof(CvScalar) * dstO->width * dstO->height);
+	cudaMalloc((CvScalar**)&VX_gpu, sizeof(CvScalar) * w * h);
 
 	for (int y = 0; y < dstO->height; y++)
 	{
 		for (int x = 0; x < dstO->width; x++)
 		{
 			CvScalar f = cvGet2D(dstO, y, x);
-			X[y][x] = f;
+			X[ y* dstO->width + x] = f;
+			//printf("dst %d %d\n", dstO->width * dstO->height, y * dstO->width + x);
 		}
 	}
-
+	
+	
 	for (int y = 0; y < h; y++)
 	{
 		for (int x = 0; x < w; x++)
 		{
 			CvScalar f = cvGet2D(srcv, y, x);
-			VX[y][x] = f;
+			VX[y*w+x] = f;
+			//printf("%d %d\n", w*h,y * w + x);
 		}
 	}
+	
+	//X,VX를 gpu 로 복사
+	cudaMemcpy(X_gpu, X, dstO->width * dstO->height * sizeof(CvScalar), cudaMemcpyHostToDevice);
+	cudaMemcpy(VX_gpu, VX, w * h * sizeof(CvScalar), cudaMemcpyHostToDevice);
 
-	 cudaMalloc((CvScalar**)&X_gpu, sizeof(CvScalar*) * dstO->width * dstO->height);
-	 cudaMalloc((CvScalar**)&VX_gpu, sizeof(CvScalar*) * w * h);
-
-	 X_gpu = X;
-	 VX_gpu = VX;
-
-
+	// X_gpu = X;
+	 //VX_gpu = VX;
 }
 
 
 __global__
-void poissonEditing_even(CvScalar** gpu_dst, int W, int H)
+void poissonEditing_even(CvScalar** gpu_dst, CvScalar* X_gpu, CvScalar* VX_gpu,int W, int H,CvPoint pos)
 {
 
 	//int tCol = blockDim.x * blockIdx.x + threadIdx.x;
 	//int tRow = blockDim.y * blockIdx.y + threadIdx.y;
-
+	
 	int x = blockIdx.x;
 	int y = blockIdx.y;
+	int offset = W * y + x;
 
 	if (x >= W || y >= H)
 		return;
 
-	if (x % 2 == 0)
+	while(y<H)
 	{
-		CvScalar F;
-		CvScalar f1 = X_gpu[y][x - 1];
-		CvScalar f2 = X_gpu[y][x + 1];
-		CvScalar f3 = X_gpu[y - 1][x];
-		CvScalar f4 = X_gpu[y + 1][x];
-
-		CvScalar v = VX_gpu[y - pos_gpu.y][x - pos_gpu.x];
-		CvScalar v1 = VX_gpu[y - pos_gpu.y][x - pos_gpu.x - 1];
-		CvScalar v2 = VX_gpu[y - pos_gpu.y][x - pos_gpu.x + 1];
-		CvScalar v3 = VX_gpu[y - pos_gpu.y - 1][x - pos_gpu.x];
-		CvScalar v4 = VX_gpu[y - pos_gpu.y + 1][x - pos_gpu.x];
-
-
-		for (int i = 0; i < 3; i++)
+		if (y % 2 == 0)
 		{
-			F.val[i] = ((f1.val[i] + f2.val[i] + f3.val[i] + f4.val[i]) - (v1.val[i] + v2.val[i] + v3.val[i] + v4.val[i])) / 4 + v.val[i];
-		}
+			CvScalar F;
+			/*
+			CvScalar f1 = X_gpu[y][x - 1];
+			CvScalar f2 = X_gpu[y][x + 1];
+			CvScalar f3 = X_gpu[y - 1][x];
+			CvScalar f4 = X_gpu[y + 1][x];
 
-		gpu_dst[y][x] = F;
+			CvScalar v = VX_gpu[y - pos_gpu.y][x - pos_gpu.x];
+			CvScalar v1 = VX_gpu[y - pos_gpu.y][x - pos_gpu.x - 1];
+			CvScalar v2 = VX_gpu[y - pos_gpu.y][x - pos_gpu.x + 1];
+			CvScalar v3 = VX_gpu[y - pos_gpu.y - 1][x - pos_gpu.x];
+			CvScalar v4 = VX_gpu[y - pos_gpu.y + 1][x - pos_gpu.x];
+
+			CvScalar v = VX_gpu[(y - pos_gpu.y) * W + (x - pos_gpu.x)];
+			CvScalar v1 = VX_gpu[(y - pos_gpu.y) * W + (x - pos_gpu.x - 1)];
+			CvScalar v2 = VX_gpu[(y - pos_gpu.y) * W + x - pos_gpu.x + 1];
+			CvScalar v3 = VX_gpu[(y - pos_gpu.y - 1) * W + x - pos_gpu.x];
+			CvScalar v4 = VX_gpu[(y - pos_gpu.y + 1) * W + x - pos_gpu.x];
+			*/
+
+			CvScalar f1 = X_gpu[offset - 1];
+			CvScalar f2 = X_gpu[offset + 1];
+			CvScalar f3 = X_gpu[offset - W];
+			CvScalar f4 = X_gpu[offset + W];
+
+			CvScalar v = VX_gpu[(y - pos.y) * W + (x - pos.x)];
+			CvScalar v1 = VX_gpu[(y - pos.y) * W + (x - pos.x - 1)];
+			CvScalar v2 = VX_gpu[(y - pos.y) * W + x - pos.x + 1];
+			CvScalar v3 = VX_gpu[(y - pos.y - 1) * W + x - pos.x];
+			CvScalar v4 = VX_gpu[(y - pos.y + 1) * W + x - pos.x];
+
+
+			for (int i = 0; i < 3; i++)
+			{
+				F.val[i] = ((f1.val[i] + f2.val[i] + f3.val[i] + f4.val[i]) - (v1.val[i] + v2.val[i] + v3.val[i] + v4.val[i])) / 4 + v.val[i];
+			}
+
+			gpu_dst[y][x] = F;
+			offset ++;
+		}
+		y++;
 	}
 }
 
 __global__
-void poissonEditing_odd(CvScalar** gpu_dst, int W, int H)
+void poissonEditing_odd(CvScalar** gpu_dst, CvScalar* X_gpu, CvScalar* VX_gpu, int W, int H,CvPoint pos)
 {
-
 	int x = blockIdx.x;
 	int y = blockIdx.y;
+	int offset = W * y + x;
 
 	if (x >= W || y >= H)
 		return;
 
-	if (x % 2 != 0)
+	while (y < H)
 	{
-		CvScalar F;
-		CvScalar f1 = X_gpu[y][x - 1];
-		CvScalar f2 = X_gpu[y][x + 1];
-		CvScalar f3 = X_gpu[y - 1][x];
-		CvScalar f4 = X_gpu[y + 1][x];
-
-		CvScalar v = VX_gpu[y - pos_gpu.y][x - pos_gpu.x];
-		CvScalar v1 = VX_gpu[y - pos_gpu.y][x - pos_gpu.x - 1];
-		CvScalar v2 = VX_gpu[y - pos_gpu.y][x - pos_gpu.x + 1];
-		CvScalar v3 = VX_gpu[y - pos_gpu.y - 1][x - pos_gpu.x];
-		CvScalar v4 = VX_gpu[y - pos_gpu.y + 1][x - pos_gpu.x];
-
-
-		for (int i = 0; i < 3; i++)
+		if (y % 2 != 0)
 		{
-			F.val[i] = ((f1.val[i] + f2.val[i] + f3.val[i] + f4.val[i]) - (v1.val[i] + v2.val[i] + v3.val[i] + v4.val[i])) / 4 + v.val[i];
-		}
+			CvScalar F;
+			CvScalar f1 = X_gpu[offset - 1];
+			CvScalar f2 = X_gpu[offset + 1];
+			CvScalar f3 = X_gpu[offset - W];
+			CvScalar f4 = X_gpu[offset + W];
 
-		gpu_dst[y][x] = F;
-		//gpu_dst[tRow][tCol] = getColor(tRow, tCol);
+			CvScalar v = VX_gpu[(y - pos.y) * W + (x - pos.x)];
+			CvScalar v1 = VX_gpu[(y - pos.y) * W + (x - pos.x - 1)];
+			CvScalar v2 = VX_gpu[(y - pos.y) * W + x - pos.x + 1];
+			CvScalar v3 = VX_gpu[(y - pos.y - 1) * W + x - pos.x];
+			CvScalar v4 = VX_gpu[(y - pos.y + 1) * W + x - pos.x];
+
+			for (int i = 0; i < 3; i++)
+			{
+				F.val[i] = ((f1.val[i] + f2.val[i] + f3.val[i] + f4.val[i]) - (v1.val[i] + v2.val[i] + v3.val[i] + v4.val[i])) / 4 + v.val[i];
+			}
+
+			gpu_dst[y][x] = F;
+			//gpu_dst[tRow][tCol] = getColor(tRow, tCol);
+			offset ++;
+		}
+		y++;
 	}
 }
 
@@ -198,18 +234,21 @@ void poissonEditing()
 	CvScalar** gpu_dst;
 	CvScalar** host_dst;
 
-	cudaMalloc((CvScalar**)&gpu_dst, sizeof(CvScalar*) * W * H);
+	host_dst = (CvScalar**)malloc(sizeof(CvScalar*) * W * H);
+
+	cudaMalloc((CvScalar**)&gpu_dst, sizeof(CvScalar) * W * H);
 
 	//dim3 thread(32, 4);
-	dim3 grid(W, H);
+	dim3 grid(1, H);
 
-	poissonEditing_even << < grid, 1 >> > (gpu_dst, W, H);
+	poissonEditing_even << < grid, 1 >> > (gpu_dst, X_gpu, VX_gpu ,W, H,pos);
 
-	poissonEditing_odd << <grid, 1 >> > (gpu_dst, W, H);
+	cudaDeviceSynchronize();
 
-	cudaMemcpy(host_dst, gpu_dst, W * H * sizeof(CvScalar*), cudaMemcpyDeviceToHost);
+	poissonEditing_odd << <grid, 1 >> > (gpu_dst, X_gpu, VX_gpu ,W, H,pos);
+
+	cudaMemcpy(host_dst, gpu_dst, W * H * sizeof(CvScalar), cudaMemcpyDeviceToHost);
 	
-
 
 	for (int y = 0; y < H; y++)
 	{
@@ -223,26 +262,6 @@ void poissonEditing()
 		cvShowImage("dst", dst);
 		cvWaitKey(1);
 	}
-
-	/*
-	int cnt = 0;
-	while (cnt < 1000)	//오차 계산 잊지말기..
-	{
-		for (int y = pos.y; y < H; y++)
-		{
-			for (int x = pos.x; x < W; x++)
-			{
-				if (isCopy[y][x] == 0)		//dst 위에 복사된 영역일때
-				{
-					cvSet2D(dst, y, x, getColor(x, y));
-				}
-			}
-			cvShowImage("dst", dst);
-			cvWaitKey(1);
-		}
-		cnt++;
-	}
-	*/
 
 	cudaFree(gpu_dst);
 }
@@ -265,6 +284,7 @@ void myMouse(int event, int x, int y, int flags, void* param)
 	{
 		makePixelmemory();
 		initColor();
+
 		makeMask();
 		cvShowImage("src", src);
 		cvShowImage("msk", msk);
@@ -281,10 +301,8 @@ void myMouse2(int event, int x, int y, int flags, void* param)
 		attatchSrc(pos.x, pos.y);
 
 		//cudaMemcpy(pos_gpu, pos,  sizeof(CvPoint), cudaMemcpyHostToDevice);
-		pos_gpu = pos;
+
 		cvShowImage("dst", dst);
-
-
 		poissonEditing();
 	}
 }
