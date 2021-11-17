@@ -1,7 +1,4 @@
 
-
-
-
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
@@ -126,7 +123,7 @@ void initColor() //cvScalar 배열 만들기
 
 
 __global__
-void poissonEditing_even(CvScalar** gpu_dst, CvScalar* X_gpu, CvScalar* VX_gpu,int W, int H,CvPoint pos)
+void poissonEditing_even(CvScalar* gpu_dst, CvScalar* X_gpu, CvScalar* VX_gpu,int W, int H,CvPoint pos)
 {
 
 	//int tCol = blockDim.x * blockIdx.x + threadIdx.x;
@@ -180,7 +177,7 @@ void poissonEditing_even(CvScalar** gpu_dst, CvScalar* X_gpu, CvScalar* VX_gpu,i
 				F.val[i] = ((f1.val[i] + f2.val[i] + f3.val[i] + f4.val[i]) - (v1.val[i] + v2.val[i] + v3.val[i] + v4.val[i])) / 4 + v.val[i];
 			}
 
-			gpu_dst[y][x] = F;
+			gpu_dst[offset] = F;
 			offset ++;
 		}
 		y++;
@@ -188,7 +185,7 @@ void poissonEditing_even(CvScalar** gpu_dst, CvScalar* X_gpu, CvScalar* VX_gpu,i
 }
 
 __global__
-void poissonEditing_odd(CvScalar** gpu_dst, CvScalar* X_gpu, CvScalar* VX_gpu, int W, int H,CvPoint pos)
+void poissonEditing_odd(CvScalar* gpu_dst, CvScalar* X_gpu, CvScalar* VX_gpu, int W, int H,CvPoint pos)
 {
 	int x = blockIdx.x;
 	int y = blockIdx.y;
@@ -218,7 +215,7 @@ void poissonEditing_odd(CvScalar** gpu_dst, CvScalar* X_gpu, CvScalar* VX_gpu, i
 				F.val[i] = ((f1.val[i] + f2.val[i] + f3.val[i] + f4.val[i]) - (v1.val[i] + v2.val[i] + v3.val[i] + v4.val[i])) / 4 + v.val[i];
 			}
 
-			gpu_dst[y][x] = F;
+			gpu_dst[offset] = F;
 			//gpu_dst[tRow][tCol] = getColor(tRow, tCol);
 			offset ++;
 		}
@@ -231,24 +228,28 @@ void poissonEditing()
 	int W = dst->width;
 	int H = dst->height;
 
-	CvScalar** gpu_dst;
-	CvScalar** host_dst;
+	CvScalar* gpu_dst;
+	CvScalar* host_dst;
 
-	host_dst = (CvScalar**)malloc(sizeof(CvScalar*) * W * H);
+	host_dst = (CvScalar*)malloc(sizeof(CvScalar) * W * H);
 
 	cudaMalloc((CvScalar**)&gpu_dst, sizeof(CvScalar) * W * H);
 
 	//dim3 thread(32, 4);
-	dim3 grid(1, H);
+	dim3 grid(W, H);
 
-	poissonEditing_even << < grid, 1 >> > (gpu_dst, X_gpu, VX_gpu ,W, H,pos);
+	for (int i = 0; i < 10; i++)
+	{
+		poissonEditing_even << < grid, 1 >> > (gpu_dst, X_gpu, VX_gpu, W, H, pos);
 
-	cudaDeviceSynchronize();
+		cudaDeviceSynchronize();
 
-	poissonEditing_odd << <grid, 1 >> > (gpu_dst, X_gpu, VX_gpu ,W, H,pos);
+		poissonEditing_odd << <grid, 1 >> > (gpu_dst, X_gpu, VX_gpu, W, H, pos);
+	}
 
 	cudaMemcpy(host_dst, gpu_dst, W * H * sizeof(CvScalar), cudaMemcpyDeviceToHost);
 	
+	printf("poissonEditing Success!\n");
 
 	for (int y = 0; y < H; y++)
 	{
@@ -256,13 +257,13 @@ void poissonEditing()
 		{
 			if (isCopy[y][x] == 0)		//dst 위에 복사된 영역일때
 			{
-				cvSet2D(dst, y, x, host_dst[y][x]);
+				cvSet2D(dst, y, x, host_dst[y*W+x]);
 			}
 		}
 		cvShowImage("dst", dst);
 		cvWaitKey(1);
 	}
-
+	printf("poissonEditing Success2!\n");
 	cudaFree(gpu_dst);
 }
 
